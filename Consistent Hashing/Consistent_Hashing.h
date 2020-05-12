@@ -22,7 +22,7 @@ node_t* remove_server(node_t* root, uint32_t to_remove);
 
 int search_server(node_t* root, uint32_t server_id, node_t ** target_node);
 
-int find_successor(node_t *root, uint32_t id, int *rank_successor);
+int find_successor(node_t *root, node_t* root_, uint32_t id, int *rank_successor, int *id_successor);
 
 void Server_BST_display(node_t *root);
 
