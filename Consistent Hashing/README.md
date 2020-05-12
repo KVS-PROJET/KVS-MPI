@@ -14,13 +14,14 @@ mpi_const_hash.c contient les fonctions à base de MPI permettant d'envoyer / tr
 
 --------------------------------------------------------------------------------------------------------------------------
 Pour lancer un test il faut entrer certains paramètres au moment de compilation :
-Paramètres de Makefile:
-------------------------
+
+- Paramètres de Makefile:
+
 nproc		: 	Nombre total de processus MPI
 MODE		:	Mode d'exécution (Normal / Dynamique)
 
-Paramètres utilisé par le programme :
--------------------------------------
+- Paramètres utilisé par le programme :
+
 NBR_SERVERS 	:	Nombre de Servers initials ( doit etre < nproc / 2 )
 
 LIMIT_HASH_SPACE:	Représente l'espace de hachage a considérer pour l'application ( doit etre >> nproc )
@@ -35,7 +36,6 @@ Exemple d'utilisation en mode NORMAL :	(MODE=0) en tant que table de hachage dis
 pour compiler 	:
 
 $ make nproc=20 MODE=0 NBR_SERVERS=4 LIMIT_HASH_SPACE=100 NBR_REQUESTS=1000000
--------------------------------------------------------------------------------
 
 Description : on aura 
 
@@ -55,7 +55,5 @@ Contrairement au table de hachage distribué statique où tous les clés-valeurs
 Exemple d'utilisation en mode dynamic : (MODE=1) possibilité d'ajout ou suppression d'un serveur dynamiquement
 
 $ make nproc=20 MODE=1 NBR_SERVERS=4 LIMIT_HASH_SPACE=100 NBR_REQUESTS=1000000
-------------------------------------------------------------------------------
-
 
 
