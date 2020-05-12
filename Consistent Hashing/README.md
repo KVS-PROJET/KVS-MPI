@@ -11,3 +11,47 @@ Chaque serveur a donc son propre local KVS sous forme d'arbre binaire , défine 
 mpi_const_hash.c contient les fonctions à base de MPI permettant d'envoyer / traiter les requetes des clients.
 
 La duplication des valeurs hash des serveurs n'est pas faite dans cette implémentation, en faite cette technique permet d'encore bien distribuer la charge sur les serveurs.
+
+Cette implémentation se base sur le principe de hachage consistent à base de MPI.
+
+Pour lancer un test il faut entrer certains paramètres au moment de compilation :
+
+nproc		: 	Nombre total de processus MPI
+
+NBR_SERVERS 	:	Nombre de Servers initials ( doit etre < nproc / 2 )
+
+LIMIT_HASH_SPACE:	Représente l'espace de hachage a considérer pour l'application ( doit etre >> nproc )
+
+NBR_REQUESTS	:	Nombre de requets (insertion et recherche) souhaités (de l'ordre de 10⁶ ou plus)
+
+
+---------------------------------------------------------------------------------------------------
+MODE Normal :---------------------------------
+
+Exemple d'utilisation en mode NORMAL :	(MODE=0) en tant que table de hachage distribué statique
+
+pour compiler 	:
+
+>> make nproc=20 MODE=0 NBR_SERVERS=4 LIMIT_HASH_SPACE=100 NBR_REQUESTS=1000000 
+
+Description : on aura 
+	-	4 serveurs,
+ 
+	-	les valeurs hash des clés et les identifiant des serveurs dans l'arbre sont tous entre 0 et 100, 
+
+	-	10⁶ insertions et recherches au total
+
+----------------------------------------------------------------------------------------------------
+MODE Dynamique--------------------------------
+
+l'implémentation actuel de hashage consistent suppose que pour l'ajout d'un serveur dynamiquement on choisie au hasard un processus client et on le transforme en un serveur, et pour la suppression on supprime un serveur qui n'a pas été dans l'ensemble initial des serveurs .
+
+Contrairement au table de hachage distribué statique où tous les clés-valeurs doivent etre déplacé vers un autre serveur lors de l'ajout/suppression d'un serveur. Dans notre implémentation qui adopte le principe de hachage consistent , au moment d'ajout / suppression d'un serveur, un petit ensemble de clés-valeurs sera déplacé vers le serveur ajouté/ vers le successeur du serveur supprimé, respectivement .
+
+Exemple d'utilisation en mode dynamic : (MODE=1) possibilité d'ajout ou suppression d'un serveur dynamiquement
+
+>> make nproc=20 MODE=1 NBR_SERVERS=4 LIMIT_HASH_SPACE=100 NBR_REQUESTS=1000000
+
+
+
+
