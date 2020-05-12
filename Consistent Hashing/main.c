@@ -14,126 +14,172 @@
 #include <stdint.h>
 
 #define TESTS 100
+#define SEED 42
 
-		
 // BST initialisé à NULL, contienera tous les serveurs après appel à la fonction : Initialize_ring();
 node_t * Server_ring_g = NULL;
 
 
 // On teste l'insertion dans un premier temps
-void run_data(){
-	int a = rand(), b = rand();
+void insert_random_data(int rank , int limit_hash_space){
+	int a = rand() - rank , b = rand();
 	char key[100];
 	char value[100];
 	sprintf(key, "%d", a);
+	//char* key = "abc";
 	sprintf(value, "%d", b);
 	size_t in_data = strlen(value);	
-
-	MPI_Client_set_data(key, value, in_data, Server_ring_g);
+	MPI_Client_set_data(key, value, in_data, Server_ring_g, limit_hash_space);
 }
 
-// int glob = 6; juste pour tester var global..
+void lookup_for_random_data(int limit_hash_space){
+	int a = rand();
+	char key[100];
+	sprintf(key, "%d", a);
+	char* value = NULL;
+	size_t out_data = 0 ;
+	MPI_Client_get_data(key, &value, &out_data, Server_ring_g, limit_hash_space);	
+}
+
+
 
 int main(int argc , char ** argv){
-	
-	
+
 	MPI_Init(&argc , &argv);
 	
-	int rank , P;  
+	int rank , nproc;  
 	
 	MPI_Comm_rank(MPI_COMM_WORLD , &rank);
-	MPI_Comm_size(MPI_COMM_WORLD , &P);
-	
-	if (P <= 1){
+	MPI_Comm_size(MPI_COMM_WORLD , &nproc);
+		
+	if (nproc <= 1){
 		printf("%s\n" , "Requires at least two processes");
 		MPI_Finalize();
 		return 0;
 	}	
-
 	srand(time(0));
 
-	//MPI_Datatype 	MPI_Key_vsize ;
-	//build_data_type(MPI_Key_vsize);-------------------------------------------
-	
 	MPI_Datatype MPI_Key_vsize; 
-	
-	int 		blocklens[2] = {1, KEY_MAX};
-	
-	MPI_Aint 	displacements[2] ;
-
-	MPI_Aint 	offsets[2];
-	
-       	// check the compiler first : size_t might be unsigned long or unsigned long long !
-
-	MPI_Datatype	typelist[2] = { MPI_UNSIGNED_LONG_LONG, MPI_CHAR};
+	build_data_type(&MPI_Key_vsize);
 	
 
-	displacements[0] = offsetof(struct key_Vsize_s, size_value) ;
-        displacements[1] = offsetof(struct key_Vsize_s, key) ;	
-	
-	MPI_Type_create_struct(2, blocklens, displacements, typelist, &MPI_Key_vsize);
-	MPI_Type_commit(&MPI_Key_vsize);
-	//--------------------------------------------------------------------------------
-	
-	//printf("glob = %d\n", glob);
-	
-	// Initialize BST of servers -------------------------------------------------- 
-	Initialize_ring(&Server_ring_g   /*, &glob*/);
-	printf("server_ring_g = %p\n", Server_ring_g);
-	//printf("glob = %d\n", glob);
-	//----------------------------------------------------------------------------
-	
-	if (rank %2 == 0){
-		// Initialize local kvs in every server
-		// local_kvs_root is also a BST that represents the local kvs in this server.
-		local_kvs_t* local_kvs_root = NULL;
+	//-------------------------------------------------------------------------------------
+	int nbr_servers, nbr_clients ;
+	long int hash_space_limit ;
+	long int number_of_tests ;
+	int chunk, part ;
+	long int req_per_client;
+	if(argc != 4){
+		perror(" Enter exactly 4 correct arguments");
+		return 1;
+	}
+	else{
+		nbr_servers 		=	atoi(argv[1]);
+		hash_space_limit	=	atoi(argv[2]);
+		number_of_tests		=	atoi(argv[3]);
+		
+		if(nbr_servers > nproc / 2  ||  hash_space_limit <  nproc  || number_of_tests <= 0){
+			perror("Enter correct arguments !");
+			return 1;
+		}
+		
+		chunk	= hash_space_limit / nbr_servers;
+		part	= nproc / nbr_servers;
+		
+		nbr_clients 	= nproc - nbr_servers;
+		req_per_client = number_of_tests / nbr_clients ;
+	}
+				
+	// Initialize BST of servers ---------------------------------------------------------	
+	Initialize_ring(&Server_ring_g , nbr_servers , nproc);
 
-		//printf("server_ring_g = %p\n", Server_ring_g);	
+	double elapsed_time = 0. , elapsed_time_g = 0.;
+	long int nbr_opr = 0 ;
 
-		MPI_Initilize_local_kvs(local_kvs_root);
+	if( rank == 0){
+		printf("chunk = %d\n", chunk);
+		printf("part = %d \n", part);
+		printf("nbr req / Client = %ld\n", req_per_client);
+	}
 		
-//MPI_Initilize_server_ring(local_kvs_root/*, rank, &Server_ring_g*/); // voir mpi_const_hash.c
-		
-printf("server_ring_g initialized = %p", Server_ring_g);		
-		//printf("rank = %d" , rank);
-		
-
-		double t_start, t_end;
-		
-		t_start = MPI_Wtime();
-		
-		/*chaque serveur traite les requetes correspond à son local kvs
-		 *en se basant sur le principe de consistent hashing où les serveurs sont regroupé 
-		 *dans une BST structure : Server_ring_g (par leur valeur hash obtenu par MurmurHash)
-		 *Les valeurs hash des clés et les valeurs hash des serveurs sont regroupés dans une structure d'anneau abstraite
-		 *de telle façon à ce que :
-		 **Si par exemple deux serveurs de valeur hashs i et j respictivement (tel que le serveur j vient juste après le serveur i dans l'anneau : i.e le serveur j est successeur de i dans la structure BST des serveurs)
-		 **Alors le serveur j prend en charge tous les clés
-		  *dont la valeurs hash est compris entre i (inclus) et j .
-		*De cette façon la charge sera répartie sur les serveurs	
-		*/
-		MPI_Server_process_requests(local_kvs_root);
-
-		t_end	= MPI_Wtime();
-		
-		//long long int nbr_test_global = NUMBER_OF_TESTS_PER_PROCESS * TESTS * P ;
-		//printf("Numbers of TESTS_PER_PROCESS = %d\nNumber of TESTS = %d\nTotal number of Tests global = %d*%d%d = %lld\n", NUMBER_OF_TESTS_PER_PROCESS, TESTS, NUMBER_OF_TESTS_PER_PROCESS, TESTS, P, nbr_test_global);
-		
-		//printf("Time elapsed	: %f\n", t_end - t_start);
-		//return 0 ;
+	local_kvs_t* local_kvs_root = NULL;	
 	
+	if (rank % part == 0){
+
+		MPI_Server_process_requests(&local_kvs_root, &elapsed_time, &nbr_opr);
+	
+		//printf("Number of operation for rank %d = %ld \t elapsed time = %f\n", rank, nbr_opr, elapsed_time); fflush(stdout);
+	}
+	else {	
+		for(long int i = 0; i <  req_per_client ; i++)
+			insert_random_data(rank, hash_space_limit);  	
+		
+		for(long int i = 0; i <  req_per_client ; i++)
+			lookup_for_random_data(hash_space_limit);	
 	}
 
-	else {	
+	MPI_Reduce(&elapsed_time, &elapsed_time_g, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-		for(int i = 0; i < 1/*TESTS*/; i++){
-			run_data();  	
-		}
+
+	int target_client = -1 ;	
+	if (rank == 0)	
+		printf("Global time elapsed %f\n", elapsed_time_g);
+
+	if((rank % part != 0)  && ( rank != target_client) )	
+		MPI_Finish_task(nbr_servers, nproc, target_client, part);
+	else
+		MPI_Server_process_requests(&local_kvs_root, &elapsed_time, &nbr_opr);
+	//--------------------------------------------------------------------------------------
+
+#ifdef _DYNAMIC_ADD_REMOVE_SERVER_
+
+	/* Add a server randomly */
+	target_client = INT_MAX % nproc ;
+	//target_client = 6;
+	int new_server ;
+	int msg_bcast[2] ;
+	if(rank == 0){
+		puts("Server to Add :");
+		printf("target_client = %d\n", target_client);	
+	}
+	if ( target_client % part != 0 ){ // not already a server
+		if( rank == target_client)
+			new_server = target_client ;
+
+		msg_bcast[0] = 1 ; // 1 for adding a server, -1 for removing one
+		msg_bcast[1] = new_server;			
+	}
+	else{
+		puts("Any server added, recompile!");
+	}
+
+	// Bcast the msg to all process to add the new added server
+	MPI_Bcast(msg_bcast, 2, MPI_INT, target_client, MPI_COMM_WORLD);
+
+	// All processes receives the broadcasted msg, refresh the ring	and move the eventual data
+	MPI_Refresh_ring(&Server_ring_g, msg_bcast, chunk, &nbr_servers, part, &local_kvs_root, hash_space_limit);
+	if (rank == 0)
+		printf("process %d added to servers\n" ,target_client);
 	
+	//Server_BST_display(Server_ring_g);
 
-	}	
-	MPI_Finish_task(P);
+	// We process random data to our new set of servers
+	if (rank % part == 0 || rank == target_client){	
+		MPI_Server_process_requests(&local_kvs_root, &elapsed_time, &nbr_opr);
+	}
+	else{
+		for(long int i = 0; i < 1; i++)
+			insert_random_data(rank, hash_space_limit);
+	}
 
+
+	if(rank % part != 0 && rank != target_client)	
+		MPI_Finish_task(nbr_servers, nproc, target_client, part);
+	else
+		MPI_Server_process_requests(&local_kvs_root, &elapsed_time, &nbr_opr);
+	
+#endif		
+	
 	MPI_Finalize();
 	return 0;
 }
