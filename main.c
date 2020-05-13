@@ -11,7 +11,7 @@
 #include <limits.h>
 #include <kvs_mpi.h>
 
-#define TESTS 100
+#define TESTS 1000000
 
 int main(int argc , char ** argv){
 	
